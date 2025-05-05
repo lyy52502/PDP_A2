@@ -6,14 +6,42 @@
 #include<string.h>
 
 
+void allocate_arr(int n, int k, int size, int* first_k, int* last_k) {
+    int q = n / size;
+    int remainder = n % size;
+
+    if (remainder == 0) {
+        *first_k = k * q;
+        *last_k = (k + 1) * q - 1;
+    } else {
+        if (k < remainder) {
+            *first_k = k * (q + 1);
+            *last_k = (k + 1) * (q + 1) - 1;
+        } else {
+            *first_k = remainder * (q + 1) + (k - remainder) * q;
+            *last_k = *first_k + q - 1;
+        }
+    }
+}
 
 void parallel_stencil(double *input, double *global_output, int num_values, int num_steps, int rank, int size, const double *STENCIL, int STENCIL_WIDTH, int EXTENT){
-	
-	int local_N = num_values / size;
+	int first_k, last_k;
+    allocate_arr(num_values, rank, size, &first_k, &last_k);
+
+    int local_N = last_k - first_k + 1;
     double *local_input = malloc((local_N + 2 * EXTENT) * sizeof(double));
     double *local_output = malloc((local_N + 2 * EXTENT) * sizeof(double));
-
-	MPI_Scatter(input, local_N, MPI_DOUBLE,
+	int *counts = malloc(size * sizeof(int));
+	int *displs = malloc(size * sizeof(int));
+	int sum = 0;
+	for (int i = 0; i < size; ++i) {
+		int f, l;
+		allocate_arr(num_values, i, size, &f, &l);
+		counts[i] = l - f + 1;
+		displs[i] = sum;
+		sum += counts[i];
+	}
+	MPI_Scatterv(input, counts, displs, MPI_DOUBLE,
 		local_input + EXTENT, local_N, MPI_DOUBLE,
 		0, MPI_COMM_WORLD);
 	
@@ -52,13 +80,15 @@ void parallel_stencil(double *input, double *global_output, int num_values, int 
     }
     
     // Gather results back to root process
-    MPI_Gather(local_input + EXTENT, local_N, MPI_DOUBLE,
-		global_output, local_N, MPI_DOUBLE,
+    MPI_Gatherv(local_input + EXTENT, local_N, MPI_DOUBLE,
+		global_output, counts, displs, MPI_DOUBLE,
 		0, MPI_COMM_WORLD);
     
 
     free(local_input);
     free(local_output);
+	free(counts);
+	free(displs);
 }
 
 
