@@ -41,6 +41,7 @@ void parallel_stencil(double *input, double *global_output, int num_values, int 
 		displs[i] = sum;
 		sum += counts[i];
 	}
+	// the use of MPI_Scatterv and MPI_Gatherv learn from chatgpt
 	MPI_Scatterv(input, counts, displs, MPI_DOUBLE,
 		local_input + EXTENT, local_N, MPI_DOUBLE,
 		0, MPI_COMM_WORLD);
